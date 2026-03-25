@@ -1,0 +1,78 @@
+---
+title: API Overview
+description: Base URL, authentication, and common patterns
+---
+
+## Base URL
+
+```
+https://api.9dlabs.xyz
+```
+
+All endpoints are prefixed with `/v1` except `/health`.
+
+## Authentication
+
+Set the `X-API-Key` header on every request:
+
+```bash
+curl -H "X-API-Key: your-api-key" https://api.9dlabs.xyz/v1/context-pack ...
+```
+
+<Note>
+If the `API_KEY` environment variable is empty (default in local dev), authentication is disabled and all requests pass through.
+</Note>
+
+## Rate Limits
+
+Rate limits are tier-based:
+
+| Plan | Requests per minute |
+|---|---|
+| Free | 30 RPM |
+| Pro | 120 RPM |
+| Team | 300 RPM |
+| Enterprise | 1,000 RPM |
+
+When rate-limited, you receive HTTP `429` with a `Retry-After` header.
+
+## Request Size Limits
+
+Maximum request body size is **10 MB** (configurable via `MAX_REQUEST_SIZE_BYTES`).
+
+## Common Response Headers
+
+| Header | Description |
+|---|---|
+| `X-Request-ID` | Unique correlation ID for every request |
+
+## Error Format
+
+All errors return JSON:
+
+```json
+{
+  "detail": "Human-readable error message"
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `400` | Bad request (invalid payload) |
+| `401` | Missing or invalid API key |
+| `403` | Policy denied or insufficient permissions |
+| `404` | Resource not found |
+| `429` | Rate limit exceeded |
+| `500` | Internal server error |
+
+## Workspace Isolation
+
+Every query is scoped by `workspace_id`. Data from workspace A is never visible to workspace B queries. This is enforced at every layer of the system.
+
+## Idempotency
+
+`POST /v1/ingest` supports an `idempotency_key` field. Submitting the same key within the same workspace returns the existing artifact instead of creating a duplicate.
+
+## Determinism
+
+Context pack responses are fully deterministic. Given the same query against the same data, the response is byte-identical — same evidence, same order, same token count, same `pack_hash`. You can verify stability by comparing `pack_hash` values across runs.

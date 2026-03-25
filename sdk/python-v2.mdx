@@ -1,0 +1,127 @@
+---
+title: Python SDK (v2)
+description: MemoryClientV2 — enhanced client with batch ingest, serving profiles, and async jobs
+---
+
+The v2 client is available on Pro, Team, and Enterprise plans.
+
+## Quick Start
+
+```python
+from nined.memory import MemoryClientV2
+
+client = MemoryClientV2(
+    base_url="https://api.9dlabs.xyz",
+    api_key="your-key",
+    workspace_id="my-workspace",
+)
+
+# Batch ingest
+client.ingest([
+    {"artifact_type": "document", "raw_payload": {"content": "Deploy runbook..."}},
+    {"artifact_type": "note", "raw_payload": {"content": "Meeting notes..."}},
+])
+
+# Retrieve with serving profile
+pack = client.context_pack("What happened?", profile="high_recall")
+for snippet in pack["snippets"]:
+    print(snippet["content"])
+```
+
+## Constructor
+
+```python
+MemoryClientV2(
+    base_url: str = "https://api.9dlabs.xyz",
+    api_key: str = "",
+    workspace_id: str = "",
+    timeout: int = 30,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `base_url` | `str` | `https://api.9dlabs.xyz` | Server URL |
+| `api_key` | `str` | `""` | API key |
+| `workspace_id` | `str` | `""` | Default workspace (used for all methods) |
+| `timeout` | `int` | `30` | HTTP timeout in seconds |
+
+## Key Differences from v1
+
+| Feature | v1 | v2 |
+|---|---|---|
+| Ingest | Single artifact | Batch (array) |
+| Workspace | Per-method parameter | Set once on client |
+| Serving profiles | Not available | `low_latency`, `balanced`, `high_recall` |
+| Async indexing | Via env var | Per-request via `async_index` param |
+| Job tracking | Not available | `job_status()` method |
+
+## Methods
+
+### `ingest()`
+
+Batch ingest multiple artifacts. Supports async indexing with job tracking.
+
+```python
+# Synchronous
+result = client.ingest([
+    {"artifact_type": "document", "raw_payload": {"content": "..."}},
+    {"artifact_type": "chat_turn", "raw_payload": {"role": "user", "content": "..."}},
+])
+
+# Async with job tracking
+result = client.ingest([...], async_index=True)
+for job in result["queued_jobs"]:
+    status = client.job_status(job["job_id"])
+    print(f"Job {job['job_id']}: {status['status']}")
+```
+
+### `context_pack()`
+
+Retrieve context with serving profiles for different latency/recall tradeoffs.
+
+```python
+pack = client.context_pack(
+    "What is our pricing policy?",
+    max_tokens=8192,
+    profile="high_recall",
+)
+```
+
+### `job_status()`
+
+Track async indexing jobs.
+
+```python
+status = client.job_status("job-uuid")
+# Returns: {"job_id": "...", "status": "done", "artifact_id": "...", ...}
+```
+
+### `ready()`
+
+Readiness check including storage health.
+
+```python
+health = client.ready()
+# Returns: {"status": "ok", "storage": "connected", ...}
+```
+
+### Other Methods
+
+The following methods work the same as v1 but use the workspace set on the client:
+
+- `feedback(action, artifact_id, ...)` — Submit correction
+- `list_receipts(limit, offset)` — List receipts
+- `get_receipt(pack_hash)` — Get receipt by pack hash
+- `artifact_status(artifact_id)` — Indexing status
+- `ask(query, max_tokens, profile)` — LLM-synthesized answer
+- `delete_workspace()` — Delete workspace
+- `health()` — Liveness check
+
+## Serving Profiles
+
+| Profile | Use Case | Tradeoff |
+|---|---|---|
+| `low_latency` | Real-time chat, quick lookups | Fastest retrieval, fewer results |
+| `balanced` | General-purpose (default) | Good recall with reasonable latency |
+| `high_recall` | Research, compliance, audits | Maximum evidence, higher latency |

@@ -1,0 +1,40 @@
+---
+title: GET /health
+description: Liveness and readiness check
+---
+
+Check that the API server is running and can connect to the database.
+
+## Request
+
+```bash
+GET /health
+```
+
+<Note>
+This endpoint does not require authentication.
+</Note>
+
+## Response
+
+```json
+{
+  "status": "ok",
+  "service": "memory-runtime",
+  "version": "0.1.0",
+  "checks": {
+    "postgres": true
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `status` | `ok` if the service is healthy |
+| `checks.postgres` | `true` if the database connection is alive |
+
+## Example
+
+```bash
+curl https://api.9dlabs.xyz/health
+```

@@ -1,0 +1,173 @@
+---
+title: GET /v1/receipts/{id}
+description: Retrieve a full decision receipt with complete audit data
+---
+
+Retrieve a single decision receipt with complete audit data — evidence, exclusions, conflicts, channel contributions, and token accounting.
+
+## Request
+
+```bash
+GET /v1/receipts/{receipt_id}
+```
+
+<ParamField path="receipt_id" type="string" required>
+  UUID of the receipt.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">Receipt UUID.</ResponseField>
+<ResponseField name="query" type="string">The original query.</ResponseField>
+<ResponseField name="timestamp" type="string">ISO 8601 creation time.</ResponseField>
+<ResponseField name="workspace_id" type="string">Workspace scope.</ResponseField>
+<ResponseField name="actor_id" type="string">Actor who made the request.</ResponseField>
+
+<ResponseField name="evidence" type="Citation[]">
+  The citations that made it into the context pack.
+</ResponseField>
+
+<ResponseField name="channel_contributions" type="object[]">
+  How many candidates each retrieval channel produced and how many were selected.
+  <Expandable title="properties">
+    <ResponseField name="channel" type="string">Channel name: `lexical`, `semantic`, or `temporal`.</ResponseField>
+    <ResponseField name="candidate_count" type="integer">Candidates produced by this channel.</ResponseField>
+    <ResponseField name="selected_count" type="integer">Candidates that made it into the final pack.</ResponseField>
+    <ResponseField name="weight" type="float">Channel weight used for fusion.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="exclusions" type="object[]">
+  Every span that was considered but excluded.
+  <Expandable title="properties">
+    <ResponseField name="span_id" type="string">UUID of the excluded span.</ResponseField>
+    <ResponseField name="artifact_id" type="string">UUID of the source artifact.</ResponseField>
+    <ResponseField name="reason" type="string">One of: `BUDGET`, `POLICY`, `REDUNDANCY`, `LOW_RELEVANCE`, `PRIVATE`, `MARKED_WRONG`, `OUTDATED`.</ResponseField>
+    <ResponseField name="detail" type="string">Human-readable explanation.</ResponseField>
+    <ResponseField name="relevance_score" type="float">The span's relevance score when it was excluded.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="conflicts" type="object[]">
+  Detected contradictions between included evidence spans.
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">Conflict UUID.</ResponseField>
+    <ResponseField name="claim_a" type="object">First conflicting span reference.</ResponseField>
+    <ResponseField name="claim_b" type="object">Second conflicting span reference.</ResponseField>
+    <ResponseField name="description" type="string">Human-readable conflict description.</ResponseField>
+    <ResponseField name="resolution" type="string | null">Resolution if one exists.</ResponseField>
+    <ResponseField name="resolved_by" type="string | null">Actor who resolved it.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token_accounting" type="object">
+  Exact token budget breakdown.
+  <Expandable title="properties">
+    <ResponseField name="budget" type="integer">Requested token budget.</ResponseField>
+    <ResponseField name="prefix_tokens" type="integer">Tokens used by pinned/authoritative content.</ResponseField>
+    <ResponseField name="working_set_tokens" type="integer">Tokens used by query-specific evidence.</ResponseField>
+    <ResponseField name="total_used" type="integer">Total tokens in the pack.</ResponseField>
+    <ResponseField name="remaining" type="integer">Unused budget.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="confidence" type="float">Confidence score (0.0 - 1.0).</ResponseField>
+<ResponseField name="abstain_flag" type="boolean">Whether the system abstained.</ResponseField>
+<ResponseField name="abstain_reason" type="string | null">Reason for abstention.</ResponseField>
+<ResponseField name="assumptions" type="string[]">Any degradation notes (e.g., "Semantic search unavailable").</ResponseField>
+<ResponseField name="policy_summary" type="object">Policy that was applied.</ResponseField>
+<ResponseField name="pack_hash" type="string">SHA-256 hash of the context pack output.</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```python Python
+receipt = client.get_receipt("r1a2b3c4-...")
+
+# Token budget breakdown
+acct = receipt["token_accounting"]
+print(f"Budget: {acct['budget']}, Used: {acct['total_used']}, Remaining: {acct['remaining']}")
+
+# What was excluded and why
+for exc in receipt["exclusions"]:
+    print(f"  Excluded: {exc['reason']} — {exc['detail']}")
+
+# Detected conflicts
+for conflict in receipt["conflicts"]:
+    print(f"  Conflict: {conflict['description']}")
+```
+
+```bash curl
+curl "https://api.9dlabs.xyz/v1/receipts/r1a2b3c4-..." \
+  -H "X-API-Key: your-key"
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "id": "r1a2b3c4-...",
+  "query": "What is the current enterprise discount cap?",
+  "timestamp": "2026-03-09T14:31:00Z",
+  "workspace_id": "ws_acme",
+  "actor_id": "user_alice",
+  "evidence": [ "..." ],
+  "channel_contributions": [
+    { "channel": "lexical", "candidate_count": 12, "selected_count": 4, "weight": 0.45 },
+    { "channel": "semantic", "candidate_count": 10, "selected_count": 3, "weight": 0.35 },
+    { "channel": "temporal", "candidate_count": 8, "selected_count": 2, "weight": 0.20 }
+  ],
+  "exclusions": [
+    {
+      "span_id": "...",
+      "artifact_id": "...",
+      "reason": "BUDGET",
+      "detail": "Exceeded token budget after 6 spans",
+      "relevance_score": 0.31
+    },
+    {
+      "span_id": "...",
+      "artifact_id": "...",
+      "reason": "POLICY",
+      "detail": "Missing required RBAC tag: finance",
+      "relevance_score": 0.78
+    }
+  ],
+  "conflicts": [
+    {
+      "id": "...",
+      "claim_a": { "artifact_id": "...", "span_id": "...", "content_hash": "..." },
+      "claim_b": { "artifact_id": "...", "span_id": "...", "content_hash": "..." },
+      "description": "Numerical conflict: 'cap at 15%' vs 'raised to 18%'",
+      "resolution": null,
+      "resolved_by": null
+    }
+  ],
+  "token_accounting": {
+    "budget": 2048,
+    "prefix_tokens": 64,
+    "working_set_tokens": 283,
+    "total_used": 347,
+    "remaining": 1701
+  },
+  "confidence": 0.87,
+  "abstain_flag": false,
+  "abstain_reason": null,
+  "assumptions": [],
+  "policy_summary": { "rbac_required": ["pricing"] },
+  "pack_hash": "sha256:..."
+}
+```
+
+## Exclusion Reasons
+
+| Reason | Description |
+|---|---|
+| `BUDGET` | Span was relevant but the token budget was full |
+| `POLICY` | Span was blocked by the request's access policy |
+| `REDUNDANCY` | Span was too similar to an already-included span |
+| `LOW_RELEVANCE` | Span scored below the relevance threshold |
+| `PRIVATE` | Span was marked private via feedback |
+| `MARKED_WRONG` | Span was flagged as incorrect via feedback |
+| `OUTDATED` | Span was flagged as outdated via feedback |

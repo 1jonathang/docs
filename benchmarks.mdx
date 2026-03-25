@@ -1,0 +1,41 @@
+---
+title: Benchmarks
+description: Performance metrics for the Memory Runtime retrieval and packing pipeline
+---
+
+## Results
+
+Evaluated on LongMemEval (500 questions) and LoCoMo (200 questions):
+
+| Metric | Value |
+|---|---|
+| Evidence Recall (LongMemEval 500Q) | **99.2%** |
+| Answer Containment (gold answer in pack) | **80.0%** |
+| End-to-End LLM Accuracy (GPT-4o-mini) | **48.9%** |
+| Evidence Recall (LoCoMo 200Q) | **92.2%** |
+| Average Latency | **294ms** |
+| P95 Latency | **452ms** |
+| Policy Violations | **0** |
+| Contract Tests Passing | **16/16** |
+
+## What These Metrics Mean
+
+### Evidence Recall (99.2%)
+
+Of 500 questions in LongMemEval, 99.2% had the relevant evidence span successfully retrieved and included in the context pack. The retrieval + fusion pipeline finds the right evidence nearly every time.
+
+### Answer Containment (80.0%)
+
+Of those same questions, 80.0% had the gold-standard answer text physically present in the packed context. This is the **packing ceiling** — even a perfect LLM cannot answer correctly if the answer isn't in the context. This is the primary optimization target.
+
+### LLM Accuracy (48.9%)
+
+End-to-end accuracy when feeding context packs into GPT-4o-mini. The gap between 80% containment and 48.9% accuracy represents LLM comprehension and extraction errors — not a Memory Runtime issue.
+
+### Latency
+
+Average 294ms, P95 at 452ms. This includes retrieval, packing, receipt generation, and database persistence.
+
+### Policy Violations (0)
+
+Across all benchmark runs, zero instances of restricted, private, or policy-denied content appearing in a context pack.

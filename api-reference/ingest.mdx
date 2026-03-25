@@ -1,0 +1,150 @@
+---
+title: POST /v1/ingest
+description: Store an artifact in workspace memory
+---
+
+Store an artifact in the memory store. Artifacts are immutable and lossless — the raw payload is preserved exactly as submitted.
+
+## Request
+
+```bash
+POST /v1/ingest
+```
+
+<ParamField body="workspace_id" type="string" required>
+  Workspace/tenant identifier. All data is scoped to this workspace.
+</ParamField>
+
+<ParamField body="actor_id" type="string" required>
+  User or agent who created this artifact.
+</ParamField>
+
+<ParamField body="artifact_type" type="string" required>
+  One of: `chat_turn`, `tool_call`, `tool_result`, `document`, `note`, `meeting_transcript`, `email`, `calendar_event`, `attachment`
+</ParamField>
+
+<ParamField body="raw_payload" type="object | string | array">
+  The artifact content. Stored as-is — no rewriting or summarizing.
+</ParamField>
+
+<ParamField body="timestamp" type="string">
+  ISO 8601 datetime. When the artifact was created. Defaults to current time.
+</ParamField>
+
+<ParamField body="permissions" type="object">
+  Access control for this artifact.
+  <Expandable title="properties">
+    <ParamField body="visibility" type="string" default="public">
+      `public`, `private`, or `restricted`
+    </ParamField>
+    <ParamField body="allowed_actors" type="string[]">
+      Actors who can see this artifact (when visibility is `restricted`)
+    </ParamField>
+    <ParamField body="denied_actors" type="string[]">
+      Actors explicitly denied access
+    </ParamField>
+    <ParamField body="rbac_tags" type="string[]" default="[]">
+      Role-based access control tags
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="idempotency_key" type="string">
+  Prevents duplicate ingestion. Same key + workspace = same artifact returned.
+</ParamField>
+
+<ParamField body="session_id" type="string">
+  Session grouping identifier.
+</ParamField>
+
+<ParamField body="thread_id" type="string">
+  Thread grouping identifier.
+</ParamField>
+
+## Response
+
+<ResponseField name="artifact_id" type="string">
+  UUID of the stored artifact.
+</ResponseField>
+
+<ResponseField name="content_hash" type="string">
+  SHA-256 hash of the raw payload.
+</ResponseField>
+
+<ResponseField name="indexed" type="boolean">
+  Whether text extraction, chunking, and embedding completed inline. `false` when async indexing is enabled.
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```python Python
+from nined.memory import MemoryClient
+
+client = MemoryClient(base_url="https://api.9dlabs.xyz", api_key="your-key")
+
+result = client.ingest(
+    workspace_id="ws_acme",
+    actor_id="user_alice",
+    artifact_type="chat_turn",
+    raw_payload={
+        "role": "user",
+        "content": "The Q2 enterprise discount cap has been raised to 18%."
+    },
+    permissions={"visibility": "restricted", "rbac_tags": ["pricing", "enterprise"]},
+    idempotency_key="msg_q2_pricing_update",
+)
+
+print(result["artifact_id"])
+```
+
+```bash curl
+curl -X POST https://api.9dlabs.xyz/v1/ingest \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{
+    "workspace_id": "ws_acme",
+    "actor_id": "user_alice",
+    "artifact_type": "chat_turn",
+    "raw_payload": {
+      "role": "user",
+      "content": "The Q2 enterprise discount cap has been raised to 18%."
+    },
+    "permissions": {
+      "visibility": "restricted",
+      "rbac_tags": ["pricing", "enterprise"]
+    },
+    "idempotency_key": "msg_q2_pricing_update"
+  }'
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "artifact_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "content_hash": "sha256:e3b0c44298fc1c14...",
+  "indexed": true
+}
+```
+
+## Artifact Types
+
+| Type | Description |
+|---|---|
+| `chat_turn` | A single conversation message (user or assistant) |
+| `tool_call` | An agent's invocation of an external tool |
+| `tool_result` | The result returned by a tool |
+| `document` | A document (policy, runbook, report, etc.) |
+| `note` | A free-form note |
+| `meeting_transcript` | Meeting transcript or summary |
+| `email` | An email message |
+| `calendar_event` | A calendar entry |
+| `attachment` | A file attachment (binary content via `blob_pointer`) |
+
+## Notes
+
+- Artifacts are **immutable** — once ingested, they cannot be modified. Use [feedback](/api-reference/feedback) to flag artifacts as wrong or outdated.
+- The raw payload is stored **losslessly** with a SHA-256 content hash for verification.
+- When `ASYNC_INDEXING=true`, indexing (text extraction, chunking, embedding) happens in a background worker. Use [artifact status](/api-reference/artifact-status) to check progress.

@@ -1,0 +1,58 @@
+---
+title: GET /v1/artifacts/{id}/status
+description: Check the indexing status of an artifact
+---
+
+Check whether an artifact has been indexed (text extracted, chunked, and embedded).
+
+## Request
+
+```bash
+GET /v1/artifacts/{artifact_id}/status
+```
+
+<ParamField path="artifact_id" type="string" required>
+  UUID of the artifact.
+</ParamField>
+
+## Response
+
+<ResponseField name="artifact_id" type="string">UUID of the artifact.</ResponseField>
+<ResponseField name="workspace_id" type="string">Workspace it belongs to.</ResponseField>
+<ResponseField name="artifact_type" type="string">The artifact type.</ResponseField>
+<ResponseField name="indexed" type="boolean">Whether indexing is complete.</ResponseField>
+<ResponseField name="span_count" type="integer">Number of spans generated.</ResponseField>
+<ResponseField name="total_tokens" type="integer">Total tokens across all spans.</ResponseField>
+<ResponseField name="indexed_at" type="string">ISO 8601 timestamp of indexing completion.</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```python Python
+status = client.artifact_status("a1b2c3d4-...")
+print(f"Indexed: {status['indexed']}, Spans: {status['span_count']}")
+```
+
+```bash curl
+curl "https://api.9dlabs.xyz/v1/artifacts/a1b2c3d4-.../status" \
+  -H "X-API-Key: your-key"
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "artifact_id": "a1b2c3d4-...",
+  "workspace_id": "ws_acme",
+  "artifact_type": "chat_turn",
+  "indexed": true,
+  "span_count": 3,
+  "total_tokens": 187,
+  "indexed_at": "2026-03-09T14:30:01Z"
+}
+```
+
+<Note>
+This endpoint is most useful when `ASYNC_INDEXING=true`. With synchronous indexing (default), artifacts are indexed inline and `indexed` is always `true` in the ingest response.
+</Note>

@@ -1,0 +1,60 @@
+---
+title: Billing
+description: Usage tracking and plan management
+---
+
+## GET /v1/billing/usage
+
+Get current month usage for the authenticated tenant.
+
+```bash
+GET /v1/billing/usage
+```
+
+### Response
+
+```json
+{
+  "tenant_id": "...",
+  "period_start": "2026-03-01",
+  "event_count": 4523,
+  "tokens_consumed": 1847293
+}
+```
+
+## GET /v1/billing/plan
+
+Get the current plan and entitlements for the authenticated tenant.
+
+```bash
+GET /v1/billing/plan
+```
+
+### Response
+
+```json
+{
+  "plan": "pro",
+  "entitlements": {
+    "max_workspaces": 5,
+    "max_events_per_month": 100000,
+    "max_token_budget": 16384,
+    "rpm_limit": 120,
+    "semantic_search": true,
+    "adaptive_budget": true
+  }
+}
+```
+
+## Pricing Tiers
+
+| Plan | Runtime | Workspaces | Events/mo | Max Token Budget | RPM | Semantic Search | Adaptive Budget |
+|---|---|---|---|---|---|---|---|
+| **Free** | v1 | 1 | 10,000 | 4,096 | 30 | No | No |
+| **Pro** | v2 | 5 | 100,000 | 16,384 | 120 | Yes | Yes |
+| **Team** | v2 | 20 | 500,000 | 65,536 | 300 | Yes | Yes |
+| **Enterprise** | v2 | Unlimited | Unlimited | 131,072 | 1,000 | Yes | Yes |
+
+<Note>
+Billing is fire-and-forget — usage recording is async and never blocks the response path. Counters update in real time but are eventually consistent.
+</Note>

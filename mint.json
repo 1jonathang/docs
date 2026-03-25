@@ -1,0 +1,103 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "9D Labs",
+  "logo": {
+    "dark": "/logo/dark.png",
+    "light": "/logo/light.png"
+  },
+  "favicon": "/favicon.jpeg",
+  "colors": {
+    "primary": "#F97316",
+    "light": "#FB923C",
+    "dark": "#EA580C",
+    "anchors": {
+      "from": "#F97316",
+      "to": "#EA580C"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Dashboard",
+      "url": "https://9dlabs.xyz/dashboard"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Sign Up",
+    "url": "https://9dlabs.xyz/signup"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    },
+    {
+      "name": "SDKs",
+      "url": "sdk"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Blog",
+      "icon": "newspaper",
+      "url": "https://9dlabs.xyz/blog"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": ["introduction", "quickstart"]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": [
+        "concepts/receipts",
+        "concepts/confidence-abstention",
+        "concepts/conflict-detection",
+        "concepts/policies"
+      ]
+    },
+    {
+      "group": "Guides",
+      "pages": [
+        "guides/agent-integration"
+      ]
+    },
+    {
+      "group": "Performance",
+      "pages": ["benchmarks"]
+    },
+    {
+      "group": "Overview",
+      "pages": ["api-reference/overview"]
+    },
+    {
+      "group": "Endpoints",
+      "pages": [
+        "api-reference/ingest",
+        "api-reference/context-pack",
+        "api-reference/receipts-list",
+        "api-reference/receipts-get",
+        "api-reference/feedback",
+        "api-reference/artifact-status",
+        "api-reference/register",
+        "api-reference/billing",
+        "api-reference/health"
+      ]
+    },
+    {
+      "group": "Python SDK",
+      "pages": [
+        "sdk/python",
+        "sdk/python-v2",
+        "sdk/error-handling"
+      ]
+    },
+    {
+      "group": "TypeScript SDK",
+      "pages": ["sdk/typescript"]
+    }
+  ],
+  "footerSocials": {
+    "website": "https://9dlabs.xyz"
+  }
+}

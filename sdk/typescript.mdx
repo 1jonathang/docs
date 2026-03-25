@@ -1,0 +1,116 @@
+---
+title: TypeScript SDK
+description: Minimal TypeScript SDK for the Memory Runtime API
+---
+
+## Installation
+
+```bash
+npm install @9d/memory
+```
+
+## Quick Start
+
+```typescript
+import { MemoryClient } from "@9d/memory";
+
+const client = new MemoryClient("https://api.9dlabs.xyz", "your-api-key");
+
+// Ingest an artifact
+await client.ingest({
+  workspace_id: "ws_1",
+  actor_id: "user_1",
+  artifact_type: "chat_turn",
+  raw_payload: { role: "user", content: "I prefer Redis over Memcached." },
+});
+
+// Retrieve a context pack
+const pack = await client.contextPack({
+  query: "What database cache do I prefer?",
+  workspace_id: "ws_1",
+  max_tokens: 2048,
+});
+
+console.log(pack.context_text);
+console.log(`Confidence: ${pack.confidence}`);
+
+// Get the decision receipt
+const receipt = await client.receipt(pack.receipt_id);
+```
+
+## Constructor
+
+```typescript
+new MemoryClient(baseUrl: string, apiKey?: string)
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `baseUrl` | `string` | Yes | Server URL (e.g., `https://api.9dlabs.xyz`) |
+| `apiKey` | `string` | No | API key for `X-API-Key` header |
+
+## Methods
+
+### `ingest(payload)`
+
+Store an artifact. Accepts the same fields as [POST /v1/ingest](/api-reference/ingest).
+
+```typescript
+const result = await client.ingest({
+  workspace_id: "ws_1",
+  actor_id: "system",
+  artifact_type: "document",
+  raw_payload: { title: "Policy", content: "..." },
+  idempotency_key: "doc_001",
+});
+```
+
+### `contextPack(payload)`
+
+Retrieve a context pack. Accepts the same fields as [POST /v1/context-pack](/api-reference/context-pack).
+
+```typescript
+const pack = await client.contextPack({
+  query: "What happened?",
+  workspace_id: "ws_1",
+  max_tokens: 4096,
+});
+```
+
+### `feedback(payload)`
+
+Submit a correction event. Accepts the same fields as [POST /v1/feedback](/api-reference/feedback).
+
+```typescript
+await client.feedback({
+  action: "pin",
+  artifact_id: "...",
+  span_id: "...",
+  actor_id: "user_1",
+  workspace_id: "ws_1",
+});
+```
+
+### `receipt(receiptId)`
+
+Get a decision receipt by ID.
+
+```typescript
+const receipt = await client.receipt("receipt-uuid");
+```
+
+## Error Handling
+
+The client throws standard `Error` objects with the HTTP status code and response body:
+
+```typescript
+try {
+  const pack = await client.contextPack({ ... });
+} catch (error) {
+  if (error.message.startsWith("HTTP 429")) {
+    // Rate limited — back off
+  } else if (error.message.startsWith("HTTP 403")) {
+    // Policy denied
+  }
+}
+```

@@ -1,0 +1,55 @@
+---
+title: POST /v1/register
+description: Register a new tenant and receive an API key
+---
+
+Register a new tenant in multi-tenant mode. Returns a tenant ID and API key.
+
+## Request
+
+```bash
+POST /v1/register
+```
+
+<ParamField body="email" type="string" required>
+  Email address for the new tenant.
+</ParamField>
+
+## Response
+
+<ResponseField name="tenant_id" type="string">UUID of the new tenant.</ResponseField>
+<ResponseField name="api_key" type="string">API key for authenticating requests.</ResponseField>
+<ResponseField name="message" type="string">Confirmation message.</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```python Python
+from nined.memory import MemoryClient
+
+client = MemoryClient(base_url="https://api.9dlabs.xyz")
+
+result = client.register("team@example.com")
+print(f"API Key: {result['api_key']}")
+```
+
+```bash curl
+curl -X POST https://api.9dlabs.xyz/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "team@example.com"}'
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "tenant_id": "t1a2b3c4-...",
+  "api_key": "9d_sk_...",
+  "message": "Tenant registered successfully"
+}
+```
+
+<Note>
+Registration is only available when the control plane database is configured (`CONTROL_PLANE_DATABASE_URL`). In single-tenant mode, registration is not needed.
+</Note>

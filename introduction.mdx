@@ -1,0 +1,82 @@
+---
+title: Introduction
+description: The control layer for AI agent memory
+---
+
+## What is Memory Runtime?
+
+Memory Runtime is a model-agnostic API that sits between an AI agent and its accumulated memory. It selects the right evidence for a given query under explicit constraints — token budget, latency, cost, and access policy — and returns an auditable decision receipt proving exactly what was used, excluded, and why.
+
+It is **not** a vector database, RAG toolkit, or agent framework. It is the **control layer** that governs what memory enters an LLM's context window.
+
+```
+Your Agent → POST /v1/ingest       (store artifacts)
+           → POST /v1/context-pack (retrieve + pack + receipt)
+           → inject context_text into LLM
+           → POST /v1/feedback     (correct)
+```
+
+## The Problem
+
+Every AI agent that maintains long-term memory faces the same problem: the model has a finite context window, but the memory store grows without bound. Naive approaches — dump everything, or run a single vector search — break in predictable ways:
+
+- **Context overflow.** Agents shove in too much and blow the token budget.
+- **Missing evidence.** A single retrieval channel misses relevant facts that a different search strategy would have found.
+- **No auditability.** When the model gives a wrong answer, there is no way to trace which evidence it saw, what was excluded, or why.
+- **Policy violations.** Private, outdated, or access-restricted content leaks into the prompt with no enforcement layer.
+- **Non-determinism.** The same query on the same data produces different context packs, making debugging impossible.
+
+Memory Runtime solves all five.
+
+## What It Does
+
+Given a **query** and a **token budget**, Memory Runtime:
+
+1. **Retrieves** the most relevant evidence from everything your agent has stored.
+2. **Filters** candidates against [access policies](/concepts/policies) and feedback signals (pinned, private, marked wrong, outdated).
+3. **Packs** the best evidence into your token budget, removing redundancy and enforcing source diversity.
+4. **Scores confidence** and [abstains](/concepts/confidence-abstention) when evidence is insufficient — rather than hallucinating with bad context.
+5. **Detects conflicts** between evidence (numerical contradictions, superseded information, negation pairs).
+6. **Returns a [decision receipt](/concepts/receipts)** — a full audit trail of what was included, what was excluded and why, token accounting, and conflict reports.
+
+The output is a ready-to-inject prompt string with `[cite:N]` markers for provenance, plus structured metadata for the agent to act on.
+
+## Use Cases
+
+<CardGroup cols={2}>
+
+<Card title="Long-Running AI Agents" icon="robot">
+  Agents that persist across sessions accumulate thousands of conversation turns, tool outputs, and documents. Memory Runtime ensures they recall the right context for each query without exceeding the model's token limit.
+</Card>
+
+<Card title="Enterprise Knowledge Assistants" icon="building">
+  When an assistant serves multiple users across teams, Memory Runtime enforces access control — a user only sees evidence their role permits. Private notes stay private.
+</Card>
+
+<Card title="Compliance-Sensitive Domains" icon="shield-check">
+  In regulated industries (finance, healthcare, legal), operators need to prove why the model said what it said. Decision receipts provide a complete audit trail.
+</Card>
+
+<Card title="Multi-Source Memory" icon="layer-group">
+  Agents that ingest from diverse sources — chat history, documents, emails, calendar events, meeting transcripts, tool outputs — need a unified retrieval layer that weighs recency, relevance, and source diversity.
+</Card>
+
+<Card title="Debugging and Evaluation" icon="magnifying-glass">
+  When an agent gives a wrong answer, receipts let you trace the failure to its root: was the evidence missing? Retrieved but excluded by policy? Lost to budget constraints?
+</Card>
+
+</CardGroup>
+
+## Key Metrics
+
+| Metric | Value |
+|---|---|
+| Evidence Recall (LongMemEval 500Q) | **99.2%** |
+| Average Latency | **294ms** |
+| P95 Latency | **452ms** |
+| Policy Violations | **0** |
+| Contract Tests | **16/16 pass** |
+
+<Card title="Get Started" icon="rocket" href="/quickstart">
+  Set up Memory Runtime in 5 minutes and make your first context pack request.
+</Card>

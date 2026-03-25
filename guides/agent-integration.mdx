@@ -1,0 +1,200 @@
+---
+title: Agent Integration
+description: The complete ingest-query-feedback loop for production AI agents
+---
+
+This guide shows the standard pattern for integrating Memory Runtime into any AI agent — LangChain, CrewAI, AutoGen, or custom frameworks.
+
+## The Loop
+
+Every agent interaction follows four steps:
+
+```
+1. POST /v1/ingest       → Store artifacts (conversations, docs, tool outputs)
+2. POST /v1/context-pack → Get budgeted, policy-safe context
+3. Feed context_text     → Inject directly into your LLM's system prompt
+4. POST /v1/feedback     → Pin, correct, or mark-private to improve future packs
+```
+
+The agent never sees raw memory. It only sees what passes through the budget + policy + relevance filters. Every decision is logged in a receipt.
+
+## Step 1: Ingest Memory
+
+As your agent generates or receives information, ingest it:
+
+```python
+import httpx
+
+client = httpx.Client(base_url="https://api.9dlabs.xyz", headers={"X-API-Key": "your-key"})
+
+# Ingest a conversation turn
+client.post("/v1/ingest", json={
+    "workspace_id": "ws_acme",
+    "actor_id": "agent_assistant",
+    "artifact_type": "chat_turn",
+    "raw_payload": {
+        "role": "assistant",
+        "content": "The board approved an 18% enterprise discount cap for Q2."
+    },
+    "idempotency_key": "turn_2026030901",
+})
+
+# Ingest a document
+client.post("/v1/ingest", json={
+    "workspace_id": "ws_acme",
+    "actor_id": "user_alice",
+    "artifact_type": "document",
+    "raw_payload": {
+        "title": "Q2 Pricing Policy",
+        "content": "... full document text ..."
+    },
+})
+```
+
+<Tip>
+Use `idempotency_key` to safely retry ingestion without creating duplicates. Same key + workspace = same artifact returned.
+</Tip>
+
+## Step 2: Retrieve Context Before Inference
+
+Before every LLM call, ask Memory Runtime for the relevant context:
+
+```python
+pack = client.post("/v1/context-pack", json={
+    "query": "What is the enterprise discount cap for Q2?",
+    "max_tokens": 4096,
+    "workspace_id": "ws_acme",
+    "actor_id": "user_alice",
+}).json()
+
+# Always check for abstention
+if pack["abstain_flag"]:
+    response = "I don't have enough information to answer that reliably."
+else:
+    # Use the context in your LLM call
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Answer using ONLY the provided context. "
+                "Cite evidence using [cite:N] format.\n\n"
+                + pack["context_text"]
+            ),
+        },
+        {"role": "user", "content": "What is the enterprise discount cap for Q2?"},
+    ]
+    llm_response = call_your_llm(messages)
+```
+
+## Step 3: Surface Receipts
+
+Every context pack comes with a `receipt_id`. Use it to provide transparency to users and operators:
+
+```python
+receipt = client.get(f"/v1/receipts/{pack['receipt_id']}").json()
+
+# Show what evidence was used
+for citation in pack["citations"]:
+    print(f"  Source: {citation['source_type']} (relevance: {citation['relevance_score']:.2f})")
+    print(f"  Preview: {citation['content_preview']}")
+
+# Log any conflicts
+for conflict in receipt["conflicts"]:
+    print(f"  Conflict: {conflict['description']}")
+
+# Token budget breakdown
+acct = receipt["token_accounting"]
+print(f"Budget: {acct['budget']}, Used: {acct['total_used']}, Remaining: {acct['remaining']}")
+```
+
+## Step 4: Apply Feedback
+
+When users correct the agent, feed it back to improve future context packs:
+
+```python
+# User says a piece of evidence is wrong
+client.post("/v1/feedback", json={
+    "action": "mark_wrong",
+    "artifact_id": "...",
+    "span_id": "...",
+    "actor_id": "user_alice",
+    "workspace_id": "ws_acme",
+    "reason": "This pricing info is outdated",
+})
+
+# Pin authoritative information
+client.post("/v1/feedback", json={
+    "action": "pin",
+    "artifact_id": "...",
+    "span_id": "...",
+    "actor_id": "user_alice",
+    "workspace_id": "ws_acme",
+    "reason": "This is the current Q2 pricing policy",
+})
+```
+
+## Full Async Example
+
+A complete async agent loop using the Python SDK:
+
+```python
+import asyncio
+import httpx
+from openai import AsyncOpenAI
+
+BASE = "https://api.9dlabs.xyz"
+HEADERS = {"X-API-Key": "your-key"}
+
+async def agent_turn(user_message: str, workspace_id: str) -> str:
+    oai = AsyncOpenAI()
+
+    async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
+        # Store the user message
+        await client.post(f"{BASE}/v1/ingest", json={
+            "workspace_id": workspace_id,
+            "actor_id": "user",
+            "artifact_type": "chat_turn",
+            "raw_payload": {"role": "user", "content": user_message},
+        })
+
+        # Get budgeted context
+        resp = await client.post(f"{BASE}/v1/context-pack", json={
+            "query": user_message,
+            "max_tokens": 4096,
+            "workspace_id": workspace_id,
+        })
+        pack = resp.json()
+
+        if pack["abstain_flag"]:
+            return "I don't have enough information to answer that."
+
+        # Call LLM with context
+        completion = await oai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Answer using ONLY the provided context. "
+                        "Cite sources using [cite:N] format.\n\n"
+                        + pack["context_text"]
+                    ),
+                },
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0,
+        )
+        answer = completion.choices[0].message.content
+
+        # Store the assistant response
+        await client.post(f"{BASE}/v1/ingest", json={
+            "workspace_id": workspace_id,
+            "actor_id": "assistant",
+            "artifact_type": "chat_turn",
+            "raw_payload": {"role": "assistant", "content": answer},
+        })
+
+        return answer
+
+asyncio.run(agent_turn("What did we decide about Q2 pricing?", "ws_sales"))
+```

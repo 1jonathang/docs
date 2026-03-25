@@ -1,0 +1,123 @@
+---
+title: POST /v1/feedback
+description: Submit a correction event to improve future context packs
+---
+
+Submit a correction event. Feedback is stored as an append-only event — it never mutates the original artifact or span.
+
+## Request
+
+```bash
+POST /v1/feedback
+```
+
+<ParamField body="action" type="string" required>
+  One of: `pin`, `private`, `mark_wrong`, `outdated`, `resolve_conflict`
+</ParamField>
+
+<ParamField body="artifact_id" type="string" required>
+  The artifact to apply feedback to.
+</ParamField>
+
+<ParamField body="span_id" type="string" required>
+  The specific span within the artifact.
+</ParamField>
+
+<ParamField body="actor_id" type="string" required>
+  Who is submitting the feedback.
+</ParamField>
+
+<ParamField body="workspace_id" type="string" required>
+  Workspace scope.
+</ParamField>
+
+<ParamField body="conflict_id" type="string">
+  Required for `resolve_conflict` action. The conflict ID from a receipt.
+</ParamField>
+
+<ParamField body="preferred_span_id" type="string">
+  The preferred span when resolving a conflict.
+</ParamField>
+
+<ParamField body="reason" type="string">
+  Human-readable reason for the feedback.
+</ParamField>
+
+## Response
+
+<ResponseField name="feedback_id" type="string">UUID of the feedback event.</ResponseField>
+<ResponseField name="action" type="string">The action that was applied.</ResponseField>
+<ResponseField name="applied" type="boolean">Whether the feedback was successfully applied.</ResponseField>
+<ResponseField name="created_at" type="string">ISO 8601 timestamp.</ResponseField>
+
+## Feedback Actions
+
+| Action | Effect on Future Packs |
+|---|---|
+| `pin` | Span is promoted to the prefix (authoritative) section of every context pack in the workspace |
+| `private` | Span is excluded from packs for other actors |
+| `mark_wrong` | Span is excluded from all future packs |
+| `outdated` | Span is deprioritized (not excluded, but penalized in scoring) |
+| `resolve_conflict` | Resolves a detected conflict, selecting the preferred span |
+
+## Example
+
+<CodeGroup>
+
+```python Python
+# Pin a span as authoritative
+client.feedback(
+    action="pin",
+    artifact_id="a1b2c3d4-...",
+    span_id="s1e2f3g4-...",
+    actor_id="user_alice",
+    workspace_id="ws_acme",
+    reason="This is the authoritative Q2 pricing policy",
+)
+
+# Mark a span as incorrect
+client.feedback(
+    action="mark_wrong",
+    artifact_id="a1b2c3d4-...",
+    span_id="s1e2f3g4-...",
+    actor_id="user_alice",
+    workspace_id="ws_acme",
+    reason="This pricing info was superseded",
+)
+
+# Resolve a conflict detected in a receipt
+client.feedback(
+    action="resolve_conflict",
+    artifact_id="a1b2c3d4-...",
+    span_id="s1e2f3g4-...",
+    actor_id="user_alice",
+    workspace_id="ws_acme",
+    conflict_id="conflict_uuid",
+    preferred_span_id="s1e2f3g4-...",
+)
+```
+
+```bash curl
+curl -X POST https://api.9dlabs.xyz/v1/feedback \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{
+    "action": "pin",
+    "artifact_id": "a1b2c3d4-...",
+    "span_id": "s1e2f3g4-...",
+    "actor_id": "user_alice",
+    "workspace_id": "ws_acme",
+    "reason": "This is the authoritative Q2 pricing policy"
+  }'
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "feedback_id": "f1a2b3c4-...",
+  "action": "pin",
+  "applied": true,
+  "created_at": "2026-03-09T14:35:00Z"
+}
+```

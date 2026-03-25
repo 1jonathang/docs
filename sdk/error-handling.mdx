@@ -1,0 +1,65 @@
+---
+title: Error Handling
+description: Exception types and handling patterns for the Python SDK
+---
+
+## Exception Hierarchy
+
+All SDK exceptions inherit from `MemoryAPIError`:
+
+```
+MemoryAPIError (base)
+├── AuthorizationError   (401, 403)
+├── PolicyDeniedError    (403)
+├── NotFoundError        (404)
+└── RateLimitError       (429)
+```
+
+## Usage
+
+```python
+from nined.memory import MemoryClient, PolicyDeniedError, RateLimitError
+
+client = MemoryClient(base_url="https://api.9dlabs.xyz", api_key="your-key")
+
+try:
+    pack = client.context_pack(query="...", workspace_id="ws-1")
+except PolicyDeniedError as e:
+    print(f"Policy violation: {e.detail}")
+except RateLimitError:
+    print("Rate limit exceeded — back off and retry")
+```
+
+## Exception Reference
+
+| Exception | HTTP Status | When Raised |
+|---|---|---|
+| `MemoryAPIError` | Any | Base class for all API errors. Catch this for generic error handling. |
+| `AuthorizationError` | 401, 403 | Missing or invalid API key. |
+| `PolicyDeniedError` | 403 | The request's policy denied access to the requested data. |
+| `NotFoundError` | 404 | The requested resource (artifact, receipt, workspace) does not exist. |
+| `RateLimitError` | 429 | Rate limit exceeded for the current plan tier. |
+
+## Exception Properties
+
+All exceptions expose:
+
+| Property | Type | Description |
+|---|---|---|
+| `status_code` | `int` | HTTP status code |
+| `detail` | `str` | Human-readable error message |
+
+## Handling Abstention
+
+Abstention is not an error — it is a normal response when evidence is insufficient. Check `abstain_flag` instead of catching exceptions:
+
+```python
+pack = client.context_pack(query="...", workspace_id="ws-1")
+
+if pack["abstain_flag"]:
+    # Insufficient evidence — handle gracefully
+    print(f"Cannot answer: {pack['abstain_reason']}")
+else:
+    # Use the context
+    print(pack["context_text"])
+```

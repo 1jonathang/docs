@@ -1,0 +1,82 @@
+---
+title: Policies and Access Control
+description: Per-request access policies, RBAC, and workspace isolation
+---
+
+## Workspace Isolation
+
+Every query is scoped by `workspace_id`. Data from workspace A is **never** visible to workspace B queries. This is enforced at every layer — storage, retrieval, packing, and receipts.
+
+Workspaces are the primary isolation boundary for multi-tenant deployments.
+
+## Per-Request Policies
+
+Every `POST /v1/context-pack` request can include a `policy` object that controls which evidence is allowed:
+
+```json
+{
+  "policy": {
+    "allowed_sources": ["document", "email"],
+    "denied_sources": ["chat_turn"],
+    "allowed_actors": ["user_alice", "user_bob"],
+    "rbac_required": ["sales", "pricing"],
+    "privacy_level": "strict"
+  }
+}
+```
+
+| Field | Type | Effect |
+|---|---|---|
+| `allowed_sources` | `string[]` | Only include artifacts of these types |
+| `denied_sources` | `string[]` | Exclude artifacts of these types |
+| `allowed_actors` | `string[]` | Only include artifacts created by these actors |
+| `rbac_required` | `string[]` | Require these RBAC tags on included artifacts |
+| `privacy_level` | `string` | `default` or `strict` |
+
+## Artifact Permissions
+
+Each artifact can have its own permissions set at ingest time:
+
+```json
+{
+  "permissions": {
+    "visibility": "restricted",
+    "allowed_actors": ["user_alice"],
+    "denied_actors": ["user_eve"],
+    "rbac_tags": ["sales", "enterprise"]
+  }
+}
+```
+
+| Field | Effect |
+|---|---|
+| `visibility: "public"` | Visible to all actors |
+| `visibility: "private"` | Visible only to the creator |
+| `visibility: "restricted"` | Visible only to `allowed_actors` |
+| `allowed_actors` | Whitelist of actors who can see this artifact |
+| `denied_actors` | Blacklist of actors explicitly denied access |
+| `rbac_tags` | Tags that must match the request's `rbac_required` |
+
+## How Policies Are Enforced
+
+Policy enforcement happens **after** retrieval and **before** packing:
+
+1. Retrieval channels return candidate spans
+2. Policy filter removes spans that violate the request's policy
+3. Feedback filter applies corrections (private, marked_wrong, etc.)
+4. Remaining candidates are passed to the packer
+
+Denied spans appear in the receipt's `exclusions` array with reason `POLICY`:
+
+```json
+{
+  "span_id": "...",
+  "reason": "POLICY",
+  "detail": "Missing required RBAC tag: finance",
+  "relevance_score": 0.78
+}
+```
+
+## Contract-Tested Guarantee
+
+Policy enforcement is verified by 8 contract tests that assert: **disallowed content never appears in a context pack, regardless of its relevance score.** A high-relevance span that violates policy is excluded just as strictly as a low-relevance one.

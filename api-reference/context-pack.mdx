@@ -1,0 +1,194 @@
+---
+title: POST /v1/context-pack
+description: Retrieve relevant evidence, pack it within a token budget, and get a decision receipt
+---
+
+**The core endpoint.** Given a query and token budget, retrieve relevant evidence, pack it optimally, enforce policy, and return ready-to-inject prompt text plus a full audit receipt.
+
+## Request
+
+```bash
+POST /v1/context-pack
+```
+
+<ParamField body="query" type="string" required>
+  The question or topic to retrieve evidence for.
+</ParamField>
+
+<ParamField body="max_tokens" type="integer" required>
+  Token budget (1 - 128,000). The output will never exceed this.
+</ParamField>
+
+<ParamField body="workspace_id" type="string">
+  Scope retrieval to a workspace.
+</ParamField>
+
+<ParamField body="actor_id" type="string">
+  Scope retrieval to an actor's permissions.
+</ParamField>
+
+<ParamField body="mode" type="string" default="relevance">
+  `relevance` optimizes for top hits. `coverage` spreads across more sources.
+</ParamField>
+
+<ParamField body="policy" type="object">
+  Access control policy for this request.
+  <Expandable title="properties">
+    <ParamField body="allowed_sources" type="string[]">
+      Only include these artifact types.
+    </ParamField>
+    <ParamField body="denied_sources" type="string[]">
+      Exclude these artifact types.
+    </ParamField>
+    <ParamField body="allowed_actors" type="string[]">
+      Only include artifacts from these actors.
+    </ParamField>
+    <ParamField body="rbac_required" type="string[]">
+      Require these RBAC tags on included artifacts.
+    </ParamField>
+    <ParamField body="privacy_level" type="string" default="default">
+      `default` or `strict`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="max_latency_ms" type="integer">
+  Latency constraint (advisory).
+</ParamField>
+
+<ParamField body="max_cost_usd" type="float">
+  Cost constraint (advisory).
+</ParamField>
+
+<ParamField body="session_id" type="string">
+  Scope retrieval to a specific session.
+</ParamField>
+
+## Response
+
+<ResponseField name="context_text" type="string">
+  The full prompt string to inject into your LLM call. Contains prefix (pinned) + working set (query-specific) + conflict warnings.
+</ResponseField>
+
+<ResponseField name="prefix_text" type="string">
+  Just the pinned/authoritative section.
+</ResponseField>
+
+<ResponseField name="working_set_text" type="string">
+  Just the query-specific evidence section.
+</ResponseField>
+
+<ResponseField name="citations" type="Citation[]">
+  Provenance-anchored citations for each evidence span.
+  <Expandable title="Citation properties">
+    <ResponseField name="artifact_id" type="string">UUID of the source artifact.</ResponseField>
+    <ResponseField name="span_id" type="string">UUID of the specific span.</ResponseField>
+    <ResponseField name="start_offset" type="integer">Byte offset in original artifact.</ResponseField>
+    <ResponseField name="end_offset" type="integer">Byte offset end.</ResponseField>
+    <ResponseField name="content_hash" type="string">SHA-256 of the span content.</ResponseField>
+    <ResponseField name="source_type" type="string">Artifact type (e.g., `document`, `chat_turn`).</ResponseField>
+    <ResponseField name="relevance_score" type="float">0.0 - 1.0 relevance score.</ResponseField>
+    <ResponseField name="content_preview" type="string">Short preview of the span content.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="confidence" type="float">
+  0.0 - 1.0 confidence score based on relevance, coverage, and source diversity.
+</ResponseField>
+
+<ResponseField name="abstain_flag" type="boolean">
+  `true` if the system determined there is insufficient evidence to answer. Your agent should handle this gracefully.
+</ResponseField>
+
+<ResponseField name="abstain_reason" type="string | null">
+  Human-readable reason for abstention (e.g., "Confidence too low", "Insufficient evidence tokens").
+</ResponseField>
+
+<ResponseField name="receipt_id" type="string">
+  UUID pointing to the full decision receipt. Use [GET /v1/receipts/{id}](/api-reference/receipts-get) to fetch it.
+</ResponseField>
+
+<ResponseField name="total_tokens" type="integer">
+  Exact token count of `context_text`.
+</ResponseField>
+
+<ResponseField name="pack_hash" type="string">
+  SHA-256 of the packed output. Same inputs always produce the same hash.
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```python Python
+pack = client.context_pack(
+    query="What is the current enterprise discount cap for Q2?",
+    workspace_id="ws_acme",
+    max_tokens=2048,
+    actor_id="user_alice",
+)
+
+if pack["abstain_flag"]:
+    print(f"Cannot answer: {pack['abstain_reason']}")
+else:
+    # Inject into your LLM
+    print(pack["context_text"])
+    print(f"Confidence: {pack['confidence']:.0%}")
+    print(f"Tokens used: {pack['total_tokens']}")
+```
+
+```bash curl
+curl -X POST https://api.9dlabs.xyz/v1/context-pack \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{
+    "query": "What is the current enterprise discount cap for Q2?",
+    "max_tokens": 2048,
+    "workspace_id": "ws_acme",
+    "actor_id": "user_alice",
+    "mode": "relevance",
+    "policy": {
+      "rbac_required": ["pricing"]
+    }
+  }'
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "context_text": "=== PINNED CONTEXT (Authoritative) ===\n[cite:1] The Q2 enterprise discount cap has been raised to 18%.\n\n=== TOP EVIDENCE (Most Relevant to Query) ===\n[cite:2] Enterprise pricing guidelines updated for Q2...\n\n=== END CONTEXT ===",
+  "prefix_text": "=== PINNED CONTEXT (Authoritative) ===\n[cite:1] ...",
+  "working_set_text": "=== TOP EVIDENCE ===\n[cite:2] ...",
+  "citations": [
+    {
+      "artifact_id": "a1b2c3d4-...",
+      "span_id": "s1e2f3g4-...",
+      "start_offset": 0,
+      "end_offset": 56,
+      "content_hash": "sha256:...",
+      "source_type": "chat_turn",
+      "relevance_score": 0.94,
+      "content_preview": "The Q2 enterprise discount cap has been raised to 18%."
+    }
+  ],
+  "confidence": 0.87,
+  "abstain_flag": false,
+  "abstain_reason": null,
+  "receipt_id": "r1a2b3c4-...",
+  "total_tokens": 347,
+  "pack_hash": "sha256:..."
+}
+```
+
+## Abstention
+
+<Warning>
+Always check `abstain_flag` before using `context_text`. When the system determines it cannot provide reliable evidence, it sets `abstain_flag: true`. Your agent should decline to answer rather than use low-quality context.
+</Warning>
+
+Abstention triggers when evidence quality or quantity is too low to provide a reliable answer. See [Confidence and Abstention](/concepts/confidence-abstention) for details.
+
+## Determinism
+
+Memory Runtime is fully deterministic. Given the same query against the same data, it produces byte-identical output — same evidence, same order, same token count, same `pack_hash`. You can verify this by comparing `pack_hash` values across runs.

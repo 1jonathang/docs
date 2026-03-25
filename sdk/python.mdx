@@ -1,0 +1,206 @@
+---
+title: Python SDK (v1)
+description: MemoryClient — the Python SDK for the Memory Runtime v1 API
+---
+
+## Installation
+
+```bash
+pip install nined-memory
+```
+
+Zero dependencies. Uses only Python standard library.
+
+## Quick Start
+
+```python
+from nined.memory import MemoryClient
+
+client = MemoryClient(base_url="https://api.9dlabs.xyz", api_key="your-key")
+
+# Ingest a document
+client.ingest(
+    workspace_id="ws-1",
+    actor_id="agent-1",
+    artifact_type="document",
+    raw_payload={"title": "Runbook", "content": "If auth fails, restart the pod."},
+)
+
+# Retrieve context (deterministic, budget-enforced)
+pack = client.context_pack(query="What should I do about auth?", workspace_id="ws-1")
+print(pack["context_text"])
+print(f"Confidence: {pack['confidence']}")
+
+# Audit trail
+receipt = client.get_receipt(pack["receipt_id"])
+```
+
+## Constructor
+
+```python
+MemoryClient(
+    base_url: str = "https://api.9dlabs.xyz",
+    api_key: str = "",
+    timeout: int = 30,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `base_url` | `str` | `https://api.9dlabs.xyz` | Server URL |
+| `api_key` | `str` | `""` | API key for `X-API-Key` header |
+| `timeout` | `int` | `30` | HTTP timeout in seconds |
+
+## Methods
+
+### `ingest()`
+
+Store a single artifact in workspace memory.
+
+```python
+result = client.ingest(
+    workspace_id="ws-1",
+    actor_id="user-1",
+    artifact_type="document",
+    raw_payload={"title": "...", "content": "..."},
+    permissions={"visibility": "restricted", "rbac_tags": ["sales"]},
+    idempotency_key="doc_001",
+    session_id="session_1",
+    thread_id="thread_1",
+    timestamp="2026-03-09T14:30:00Z",
+    callback_url="https://example.com/webhook",
+)
+# Returns: {"artifact_id": "...", "content_hash": "sha256:...", "indexed": True}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `workspace_id` | `str` | Yes | Workspace identifier |
+| `actor_id` | `str` | Yes | Creator identifier |
+| `artifact_type` | `str` | Yes | One of 9 types (see [artifact types](/api-reference/ingest#artifact-types)) |
+| `raw_payload` | `dict \| str \| list` | No | Content to store |
+| `blob_pointer` | `str` | No | Pointer to external blob |
+| `permissions` | `dict` | No | Access control |
+| `idempotency_key` | `str` | No | Deduplication key |
+| `session_id` | `str` | No | Session grouping |
+| `thread_id` | `str` | No | Thread grouping |
+| `timestamp` | `str` | No | ISO 8601 datetime |
+| `callback_url` | `str` | No | Webhook for async indexing completion |
+
+### `context_pack()`
+
+Retrieve a deterministic context pack for a query.
+
+```python
+pack = client.context_pack(
+    query="What is the discount cap?",
+    workspace_id="ws-1",
+    max_tokens=4096,
+    actor_id="user-1",
+    mode="relevance",
+)
+# Returns: {"context_text": "...", "citations": [...], "confidence": 0.87, ...}
+```
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `query` | `str` | Yes | — | Query to retrieve evidence for |
+| `workspace_id` | `str` | Yes | — | Workspace scope |
+| `max_tokens` | `int` | No | `4096` | Token budget |
+| `actor_id` | `str` | No | — | Actor's permission scope |
+| `mode` | `str` | No | — | `relevance` or `coverage` |
+| `max_latency_ms` | `int` | No | — | Latency constraint |
+| `max_cost_usd` | `float` | No | — | Cost constraint |
+| `min_evidence_tokens` | `int` | No | — | Minimum evidence required |
+| `min_confidence` | `float` | No | — | Minimum confidence threshold |
+| `max_spans_per_artifact` | `int` | No | — | Cap spans per artifact |
+| `diversity_decay` | `float` | No | — | Diversity enforcement factor |
+| `redundancy_jaccard_threshold` | `float` | No | — | Jaccard threshold for dedup |
+| `temporal_half_life_hours` | `float` | No | — | Temporal decay half-life |
+
+### `feedback()`
+
+Submit a correction event.
+
+```python
+client.feedback(
+    workspace_id="ws-1",
+    actor_id="user-1",
+    action="pin",
+    artifact_id="a1b2c3d4-...",
+    span_id="s1e2f3g4-...",
+    reason="Authoritative pricing policy",
+)
+# Returns: {"feedback_id": "...", "action": "pin", "applied": True}
+```
+
+### `list_receipts()`
+
+```python
+result = client.list_receipts(workspace_id="ws-1", limit=50, offset=0)
+# Returns: {"receipts": [...], "total_count": int, "limit": int, "offset": int}
+```
+
+### `get_receipt()`
+
+```python
+receipt = client.get_receipt("receipt-uuid")
+```
+
+### `artifact_status()`
+
+```python
+status = client.artifact_status("artifact-uuid")
+# Returns: {"artifact_id": "...", "indexed": True, "span_count": 3, "total_tokens": 187}
+```
+
+### `delete_workspace()`
+
+```python
+result = client.delete_workspace("ws-1")
+# Returns: {"workspace_id": "ws-1", "deleted_artifacts": 42}
+```
+
+### `ask()`
+
+Get an LLM-synthesized answer from workspace memory.
+
+```python
+answer = client.ask(query="What happened in the Q2 meeting?", workspace_id="ws-1")
+# Returns: {"answer": "...", "confidence": 0.85, "citations": [...], "receipt_id": "...", "abstain_flag": False}
+```
+
+### `health()`
+
+```python
+client.health()
+# Returns: {"status": "ok", "service": "memory-runtime", ...}
+```
+
+### `register()`
+
+Register a new tenant (multi-tenant mode).
+
+```python
+result = client.register("team@example.com")
+# Returns: {"tenant_id": "...", "api_key": "9d_sk_...", "message": "..."}
+```
+
+### `regenerate_key()`
+
+```python
+result = client.regenerate_key("team@example.com")
+# Returns: {"tenant_id": "...", "api_key": "9d_sk_...", "message": "..."}
+```
+
+### `billing_usage()`
+
+```python
+usage = client.billing_usage()
+```
+
+### `billing_plan()`
+
+```python
+plan = client.billing_plan()
+```

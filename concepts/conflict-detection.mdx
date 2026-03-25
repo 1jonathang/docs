@@ -1,0 +1,81 @@
+---
+title: Conflict Detection
+description: Automatic detection of contradictions between evidence spans
+---
+
+The receipt engine automatically detects contradictions between evidence spans included in a context pack. Detected conflicts appear as warnings in the receipt so your agent or operator can address them.
+
+## Three Rule Types
+
+### 1. Numerical Conflicts
+
+Detects when two spans discuss the same topic but cite different numbers.
+
+**Triggers when:**
+- Two spans share enough context (Jaccard similarity >= 0.3)
+- They contain different numerical values with the same unit
+
+**Example:**
+> Span A: "The enterprise discount cap is 15%."
+> Span B: "The discount cap has been raised to 18%."
+
+### 2. Supersession
+
+Detects when newer information explicitly replaces older information.
+
+**Triggers when:**
+- A span contains language like "supersedes", "revised to", "no longer", "updated to", "replaced by"
+- The spans share at least 15% token overlap
+
+**Example:**
+> Span A: "Refunds accepted within 30 days."
+> Span B: "Policy revised to 14-day refund window effective March 1."
+
+### 3. Negation Pairs
+
+Detects direct contradictions using opposing language.
+
+**Triggers when:**
+- Spans contain negation pairs: "will/will not", "approved/rejected", "allowed/prohibited", "can/cannot"
+- The spans share at least 15% token overlap
+
+**Example:**
+> Span A: "The board approved the Q3 expansion."
+> Span B: "The board rejected the Q3 expansion proposal."
+
+## Conflicts in Receipts
+
+Conflicts appear in the receipt's `conflicts` array:
+
+```json
+{
+  "conflicts": [
+    {
+      "id": "conflict-uuid",
+      "claim_a": { "artifact_id": "...", "span_id": "...", "content_hash": "..." },
+      "claim_b": { "artifact_id": "...", "span_id": "...", "content_hash": "..." },
+      "description": "Numerical conflict: 'cap at 15%' vs 'raised to 18%'",
+      "resolution": null,
+      "resolved_by": null
+    }
+  ]
+}
+```
+
+## Resolving Conflicts
+
+Use the [feedback endpoint](/api-reference/feedback) with `action: "resolve_conflict"` to mark which span is correct:
+
+```python
+client.feedback(
+    action="resolve_conflict",
+    artifact_id="...",
+    span_id="preferred-span-id",
+    actor_id="user_alice",
+    workspace_id="ws_acme",
+    conflict_id="conflict-uuid",
+    preferred_span_id="preferred-span-id",
+)
+```
+
+Once resolved, future context packs will prefer the selected span and the conflict will no longer appear as unresolved.

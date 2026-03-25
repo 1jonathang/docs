@@ -1,0 +1,67 @@
+---
+title: Decision Receipts
+description: Full audit trail for every context pack decision
+---
+
+Every call to `POST /v1/context-pack` produces a **decision receipt** — a complete record of what evidence was included, what was excluded, and why.
+
+## What a Receipt Contains
+
+| Section | Description |
+|---|---|
+| **Evidence** | Every span selected for the context pack, with relevance scores and provenance |
+| **Exclusions** | Every span considered but dropped, with the reason |
+| **Token Accounting** | Exact budget breakdown (prefix, working set, total used, remaining) |
+| **Channel Contributions** | How many candidates each retrieval channel produced and how many were selected |
+| **Conflicts** | Contradictions detected between included evidence |
+| **Assumptions** | Any degradation notes (e.g., "Semantic search unavailable") |
+| **Policy Summary** | The access policy that was applied |
+
+## Why Receipts Matter
+
+### Debugging
+
+When an agent gives a wrong answer, the receipt tells you exactly where the pipeline broke:
+
+- Was the evidence **missing** from the store entirely? (Not ingested)
+- Was it **retrieved** but excluded by **policy**? (Access control issue)
+- Was it **retrieved** but lost to **budget** constraints? (Need a larger budget)
+- Was it **retrieved** but flagged as **redundant**? (Duplicate detection was too aggressive)
+- Was it **retrieved** but had **low relevance**? (Query or indexing issue)
+
+### Compliance
+
+In regulated industries, receipts prove why the model received specific information. Every decision is traceable to a specific span, artifact, and scoring computation.
+
+### Evaluation
+
+Receipts enable systematic evaluation of the retrieval and packing pipeline. You can measure recall, precision, and coverage across thousands of queries by comparing receipt data against ground truth.
+
+## Accessing Receipts
+
+Every context pack response includes a `receipt_id`:
+
+```python
+pack = client.context_pack(query="...", workspace_id="ws-1")
+
+# Get the full receipt
+receipt = client.get_receipt(pack["receipt_id"])
+```
+
+You can also browse receipts in the Receipt UI at `GET /ui`.
+
+## Exclusion Reasons
+
+| Reason | Description |
+|---|---|
+| `BUDGET` | Span was relevant but the token budget was full |
+| `POLICY` | Span was blocked by the request's access policy |
+| `REDUNDANCY` | Span was too similar to an already-included span |
+| `LOW_RELEVANCE` | Span scored below the relevance threshold |
+| `PRIVATE` | Span was marked private via feedback |
+| `MARKED_WRONG` | Span was flagged as incorrect via feedback |
+| `OUTDATED` | Span was flagged as outdated via feedback |
+
+## Receipt Persistence
+
+Receipts are stored in the database and are queryable by workspace. They are the permanent audit trail for every memory decision your agents make.

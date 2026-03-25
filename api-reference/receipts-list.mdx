@@ -1,0 +1,55 @@
+---
+title: GET /v1/receipts
+description: List decision receipts for a workspace
+---
+
+List decision receipts, optionally filtered by workspace.
+
+## Request
+
+```bash
+GET /v1/receipts?workspace_id=ws_acme&limit=50&offset=0
+```
+
+<ParamField query="workspace_id" type="string">
+  Filter by workspace.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="50">
+  Maximum results to return.
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Pagination offset.
+</ParamField>
+
+## Response
+
+```json
+[
+  {
+    "id": "r1a2b3c4-...",
+    "query": "What is the current enterprise discount cap?",
+    "workspace_id": "ws_acme",
+    "actor_id": "user_alice",
+    "created_at": "2026-03-09T14:31:00Z"
+  }
+]
+```
+
+## Example
+
+<CodeGroup>
+
+```python Python
+receipts = client.list_receipts(workspace_id="ws_acme", limit=10)
+for r in receipts["receipts"]:
+    print(f"{r['id']} — {r['query']}")
+```
+
+```bash curl
+curl "https://api.9dlabs.xyz/v1/receipts?workspace_id=ws_acme&limit=10" \
+  -H "X-API-Key: your-key"
+```
+
+</CodeGroup>

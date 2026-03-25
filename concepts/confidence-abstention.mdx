@@ -1,0 +1,55 @@
+---
+title: Confidence and Abstention
+description: How Memory Runtime scores evidence quality and knows when to say "I don't know"
+---
+
+## Confidence Score
+
+Every context pack includes a `confidence` score (0.0 - 1.0) that reflects how well the retrieved evidence matches the query. The score accounts for:
+
+- **Relevance strength** — How closely the top evidence matches the query
+- **Evidence depth** — Whether multiple strong matches were found
+- **Budget coverage** — How much of the token budget was filled with useful evidence
+- **Source diversity** — Whether evidence comes from multiple artifacts or just one
+
+A high confidence score means the system found strong, diverse evidence that covers the query well. A low score means the evidence is weak, sparse, or from a single source.
+
+## Abstention
+
+When the system determines it cannot provide reliable evidence, it sets `abstain_flag: true` instead of returning low-quality context. This lets your agent decline to answer rather than hallucinate with bad context.
+
+### Abstention Triggers
+
+| Condition | Threshold |
+|---|---|
+| Confidence score too low | < 0.08 |
+| Insufficient evidence tokens | < 20 tokens total |
+
+### Handling Abstention
+
+<Warning>
+Always check `abstain_flag` before using `context_text`. Ignoring abstention and feeding low-quality context to your LLM will produce unreliable answers.
+</Warning>
+
+```python
+pack = client.context_pack(query="...", workspace_id="ws-1")
+
+if pack["abstain_flag"]:
+    # Insufficient evidence
+    print(f"Cannot answer: {pack['abstain_reason']}")
+    # Options:
+    # - Tell the user you don't have enough information
+    # - Fall back to a general response
+    # - Ask the user for more context
+else:
+    # Confident answer
+    print(f"Confidence: {pack['confidence']:.0%}")
+    # Feed context_text into your LLM
+```
+
+### Abstention Reasons
+
+The `abstain_reason` field provides a human-readable explanation:
+
+- `"Confidence too low"` — The evidence quality is below the threshold
+- `"Insufficient evidence tokens"` — Too little evidence was found to form a useful context
