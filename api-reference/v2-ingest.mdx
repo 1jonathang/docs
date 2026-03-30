@@ -1,0 +1,166 @@
+---
+title: POST /v2/ingest
+description: Batch ingest multiple artifacts with optional async indexing
+---
+
+<Note>
+V2 endpoint — requires **Pro, Team, or Enterprise** plan.
+</Note>
+
+Ingest an array of artifacts in a single request. Supports async indexing with job IDs so your application doesn't block on indexing completion.
+
+## Request
+
+```bash
+POST /v2/ingest
+```
+
+<ParamField body="artifacts" type="object[]" required>
+  Array of artifacts to ingest. Each artifact follows the same shape as `/v1/ingest`.
+  <Expandable title="Artifact properties">
+    <ParamField body="artifact_type" type="string" required>
+      Type of artifact: `chat_turn`, `tool_call`, `tool_result`, `document`, `note`, `meeting_transcript`, `email`, `calendar_event`, or `attachment`.
+    </ParamField>
+    <ParamField body="raw_payload" type="object" required>
+      The artifact content. Structure depends on `artifact_type`.
+    </ParamField>
+    <ParamField body="timestamp" type="string">
+      ISO 8601 timestamp. Defaults to now.
+    </ParamField>
+    <ParamField body="permissions" type="object">
+      Access control: `visibility` (`public`, `private`, `restricted`), `allowed_actors`, `denied_actors`, `rbac_tags`.
+    </ParamField>
+    <ParamField body="idempotency_key" type="string">
+      Deduplicate: same key = same artifact, no duplicate ingestion.
+    </ParamField>
+    <ParamField body="session_id" type="string">
+      Scope to a conversation session.
+    </ParamField>
+    <ParamField body="thread_id" type="string">
+      Scope to a thread within a session.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="workspace_id" type="string" required>
+  Target workspace.
+</ParamField>
+
+<ParamField body="actor_id" type="string" required>
+  The agent or user producing these artifacts.
+</ParamField>
+
+<ParamField body="async_index" type="boolean" default="false">
+  When `true`, returns job IDs immediately instead of waiting for indexing to finish. Use [GET /v2/jobs/{job_id}](/api-reference/v2-jobs) to track progress.
+</ParamField>
+
+## Response — synchronous
+
+<ResponseField name="workspace_id" type="string">Workspace these artifacts were ingested into.</ResponseField>
+
+<ResponseField name="ingested" type="object[]">
+  One entry per artifact.
+  <Expandable title="properties">
+    <ResponseField name="artifact_id" type="string">UUID of the stored artifact.</ResponseField>
+    <ResponseField name="span_ids" type="string[]">UUIDs of the indexed spans (chunks).</ResponseField>
+    <ResponseField name="created" type="string">ISO 8601 timestamp.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response — async (`async_index: true`)
+
+<ResponseField name="workspace_id" type="string">Target workspace.</ResponseField>
+
+<ResponseField name="queued_jobs" type="object[]">
+  One entry per artifact queued for indexing.
+  <Expandable title="properties">
+    <ResponseField name="job_id" type="string">Use this with [GET /v2/jobs/{job_id}](/api-reference/v2-jobs).</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```python Synchronous batch
+from nined.memory import MemoryClientV2
+
+client = MemoryClientV2(
+    base_url="https://api.9dlabs.xyz",
+    api_key="your-key",
+    workspace_id="ws_ops",
+)
+
+result = client.ingest([
+    {
+        "artifact_type": "document",
+        "raw_payload": {"title": "Deploy Runbook", "content": "Step 1: verify staging..."},
+    },
+    {
+        "artifact_type": "note",
+        "raw_payload": {"content": "Post-mortem: DB failover took 4 minutes."},
+    },
+    {
+        "artifact_type": "chat_turn",
+        "raw_payload": {"role": "user", "content": "Can we reduce failover time?"},
+    },
+])
+
+for item in result["ingested"]:
+    print(f"Stored {item['artifact_id']} ({len(item['span_ids'])} spans)")
+```
+
+```python Async with job tracking
+result = client.ingest(
+    [{"artifact_type": "document", "raw_payload": {"content": doc}} for doc in large_batch],
+    async_index=True,
+)
+
+job_ids = [job["job_id"] for job in result["queued_jobs"]]
+print(f"Queued {len(job_ids)} indexing jobs")
+
+# Check status later (or poll)
+for job_id in job_ids:
+    status = client.job_status(job_id)
+    if status["status"] == "done":
+        print(f"{job_id} ready — artifact: {status['artifact_id']}")
+    elif status["status"] == "failed":
+        print(f"{job_id} failed: {status['error_message']}")
+```
+
+```bash curl
+curl -X POST https://api.9dlabs.xyz/v2/ingest \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{
+    "workspace_id": "ws_ops",
+    "actor_id": "agent-alpha",
+    "async_index": false,
+    "artifacts": [
+      {
+        "artifact_type": "document",
+        "raw_payload": {"title": "Q3 Pricing Policy", "content": "..."},
+        "idempotency_key": "pricing-q3-v2"
+      }
+    ]
+  }'
+```
+
+</CodeGroup>
+
+```json Response (sync)
+{
+  "workspace_id": "ws_ops",
+  "ingested": [
+    {
+      "artifact_id": "a1b2c3d4-...",
+      "span_ids": ["s1a2b3c4-...", "s5e6f7g8-..."],
+      "created": "2025-03-30T12:00:00Z"
+    }
+  ]
+}
+```
+
+<Tip>
+Use `idempotency_key` on each artifact when retrying a failed batch. Artifacts with a key you've already ingested are returned immediately without creating duplicates.
+</Tip>

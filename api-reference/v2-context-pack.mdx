@@ -1,0 +1,182 @@
+---
+title: POST /v2/context-pack
+description: Retrieve context with serving profiles — choose between speed and maximum recall
+---
+
+<Note>
+V2 endpoint — requires **Pro, Team, or Enterprise** plan.
+</Note>
+
+The V2 context pack endpoint adds serving profiles on top of everything V1 offers. Pick `low_latency` for real-time interactions, `balanced` for general use, or `high_recall` for compliance and research workloads that need every relevant piece of evidence.
+
+## Request
+
+```bash
+POST /v2/context-pack
+```
+
+<ParamField body="query" type="string" required>
+  The question or topic to retrieve evidence for.
+</ParamField>
+
+<ParamField body="max_tokens" type="integer" required>
+  Token budget (1 – 128,000). The output never exceeds this. V2's adaptive budget may use less than the limit but will not exceed it.
+</ParamField>
+
+<ParamField body="workspace_id" type="string" required>
+  Scope retrieval to this workspace.
+</ParamField>
+
+<ParamField body="actor_id" type="string">
+  Scope retrieval to an actor's permissions.
+</ParamField>
+
+<ParamField body="profile" type="string" default="balanced">
+  Serving profile. Controls the retrieval strategy and budget behavior.
+
+  | Value | When to use |
+  |---|---|
+  | `low_latency` | Real-time chat, quick lookups. Fastest response, semantic search off. |
+  | `balanced` | General-purpose. Semantic search on, adaptive budget up to 1.5×. |
+  | `high_recall` | Compliance, legal, research. Maximum evidence, adaptive budget up to 4×. |
+</ParamField>
+
+<ParamField body="policy" type="object">
+  Per-request access control. Same as V1.
+  <Expandable title="properties">
+    <ParamField body="allowed_sources" type="string[]">Only include these artifact types.</ParamField>
+    <ParamField body="denied_sources" type="string[]">Exclude these artifact types.</ParamField>
+    <ParamField body="allowed_actors" type="string[]">Only include artifacts from these actors.</ParamField>
+    <ParamField body="rbac_required" type="string[]">Require these RBAC tags on included artifacts.</ParamField>
+    <ParamField body="privacy_level" type="string" default="default">`default` or `strict`.</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="session_id" type="string">
+  Scope retrieval to a session.
+</ParamField>
+
+## Response
+
+<ResponseField name="snippets" type="object[]">
+  The retrieved evidence spans, ordered by relevance.
+  <Expandable title="Snippet properties">
+    <ResponseField name="content" type="string">Text of this evidence span.</ResponseField>
+    <ResponseField name="artifact_id" type="string">Source artifact UUID.</ResponseField>
+    <ResponseField name="span_id" type="string">Source span UUID.</ResponseField>
+    <ResponseField name="score" type="float">Relevance score, 0.0 – 1.0.</ResponseField>
+    <ResponseField name="artifact_type" type="string">e.g. `document`, `chat_turn`.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pack_hash" type="string">
+  SHA-256 fingerprint of this pack. Identical inputs always produce the same hash.
+</ResponseField>
+
+<ResponseField name="serving_profile" type="string">
+  The profile that was actually used. May differ from your request if the system escalated (e.g., `balanced` → `high_recall`) because initial results were sparse.
+</ResponseField>
+
+<ResponseField name="token_accounting" type="object">
+  <Expandable title="properties">
+    <ResponseField name="budget" type="integer">Token budget used for this request.</ResponseField>
+    <ResponseField name="used" type="integer">Actual tokens in the response.</ResponseField>
+    <ResponseField name="snippets" type="integer">Number of snippets included.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="citation_count" type="integer">
+  Number of distinct source artifacts cited.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```python Compliance audit (high_recall)
+from nined.memory import MemoryClientV2
+
+client = MemoryClientV2(
+    base_url="https://api.9dlabs.xyz",
+    api_key="your-key",
+    workspace_id="ws_legal",
+)
+
+pack = client.context_pack(
+    "What data retention policies apply to EU customers?",
+    max_tokens=8192,
+    profile="high_recall",
+)
+
+print(f"Profile used: {pack['serving_profile']}")
+print(f"Evidence spans: {len(pack['snippets'])}")
+print(f"Tokens: {pack['token_accounting']['used']} / {pack['token_accounting']['budget']}")
+
+for snippet in pack["snippets"]:
+    print(f"[{snippet['score']:.2f}] {snippet['content'][:120]}...")
+```
+
+```python Real-time chat (low_latency)
+pack = client.context_pack(
+    "What did we decide in the last sprint?",
+    max_tokens=2048,
+    profile="low_latency",
+)
+# Fast response, no semantic search overhead
+context = "\n".join(s["content"] for s in pack["snippets"])
+```
+
+```python Default balanced
+pack = client.context_pack(
+    "Summarize recent customer complaints about billing",
+    max_tokens=4096,
+    # profile="balanced" is the default
+)
+```
+
+```bash curl
+curl -X POST https://api.9dlabs.xyz/v2/context-pack \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-key" \
+  -d '{
+    "workspace_id": "ws_legal",
+    "query": "What data retention policies apply to EU customers?",
+    "max_tokens": 8192,
+    "profile": "high_recall"
+  }'
+```
+
+</CodeGroup>
+
+```json Response
+{
+  "snippets": [
+    {
+      "content": "EU customer data must be retained for no more than 90 days unless explicitly consented...",
+      "artifact_id": "a1b2c3d4-...",
+      "span_id": "s1e2f3g4-...",
+      "score": 0.96,
+      "artifact_type": "document"
+    },
+    {
+      "content": "GDPR Article 5(1)(e): storage limitation principle applies to all personal data...",
+      "artifact_id": "a5b6c7d8-...",
+      "span_id": "s9a0b1c2-...",
+      "score": 0.91,
+      "artifact_type": "document"
+    }
+  ],
+  "pack_hash": "sha256:...",
+  "serving_profile": "high_recall",
+  "token_accounting": {
+    "budget": 8192,
+    "used": 1847,
+    "snippets": 2
+  },
+  "citation_count": 2
+}
+```
+
+<Tip>
+The `serving_profile` in the response can differ from what you requested. If the system detects sparse evidence with `balanced`, it may automatically escalate to `high_recall`. Always read this field if you need to know the actual strategy used.
+</Tip>

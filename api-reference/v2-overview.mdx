@@ -1,0 +1,114 @@
+---
+title: V2 Overview
+description: What's new in V2 — serving profiles, semantic retrieval, adaptive budget, and more
+---
+
+<Note>
+V2 is available on **Pro, Team, and Enterprise** plans. [Upgrade your plan](https://9dlabs.xyz/signup) to get access.
+</Note>
+
+V2 keeps everything you already know from V1 and adds a set of capabilities that become important as your workload grows: semantic retrieval that understands meaning rather than just keywords, serving profiles that let you trade latency for recall on a per-request basis, an adaptive budget that expands when evidence is sparse, and async ingest with job tracking so indexing never blocks your hot path.
+
+## V1 vs V2 at a glance
+
+| | V1 | V2 |
+|---|---|---|
+| **Retrieval** | Keyword + temporal | Keyword + temporal + **semantic** |
+| **Serving profiles** | — | `low_latency`, `balanced`, `high_recall` |
+| **Token budget** | Fixed | **Adaptive** — expands when needed |
+| **Ingest** | Single artifact | **Batch** array in one call |
+| **Async indexing** | — | Per-request `async_index` flag + **job tracking** |
+| **Workspaces** | 1 | Pro: 5 · Team: 20 · Enterprise: unlimited |
+| **Token budget (max)** | 4,096 | 16,384 – 131,072 |
+| **RPM** | 30 | 120 – 1,000 |
+
+---
+
+## Serving profiles
+
+V2 lets you pick a retrieval strategy per request instead of applying one strategy to everything.
+
+<CardGroup cols={3}>
+  <Card title="low_latency" icon="bolt">
+    Fastest response. Skips semantic search. Best for real-time chat and quick lookups where a slightly smaller result set is fine.
+  </Card>
+  <Card title="balanced" icon="scale-balanced">
+    The default. Semantic search on with adaptive budget. Covers most applications well.
+  </Card>
+  <Card title="high_recall" icon="magnifying-glass">
+    Maximum evidence. Runs multiple retrieval passes with an expanded budget. Best for compliance, legal review, and research.
+  </Card>
+</CardGroup>
+
+Pass the profile on any `/v2/context-pack` request:
+
+```python
+pack = client.context_pack("What changed in Q3 pricing?", profile="high_recall")
+```
+
+The response tells you which profile was actually used (the system can escalate if it determines results are sparse) and whether any degradation occurred.
+
+---
+
+## Semantic retrieval
+
+V1 retrieval matches on keywords and recency. V2 adds a semantic channel that understands meaning — so a query like *"customer complaints about billing"* also surfaces artifacts that talk about *"payment disputes"* or *"invoice errors"* even if those exact words don't appear in your query.
+
+Semantic retrieval is on by default in `balanced` and `high_recall` profiles. It's off in `low_latency` to keep latency predictable.
+
+---
+
+## Adaptive budget
+
+In V1, your `max_tokens` is a hard ceiling. In V2, the runtime can expand that budget automatically when evidence is sparse — so you get a meaningful context pack even when your memory doesn't have dense coverage of the query topic.
+
+The expansion multiplier depends on your serving profile:
+
+| Profile | Adaptive budget |
+|---|---|
+| `low_latency` | Off |
+| `balanced` | Up to 1.5× |
+| `high_recall` | Up to 4×, capped at 4,096 tokens |
+
+You always see the actual token count in the `token_accounting` field of the response — the budget never silently exceeds your account's plan limit.
+
+---
+
+## Batch ingest and async job tracking
+
+V1 ingests one artifact per request. V2 accepts an array, and with `async_index: true` you get job IDs back immediately — no waiting for indexing to complete before moving on.
+
+```python
+# Ingest a batch of 20 chat turns in one call
+result = client.ingest([
+    {"artifact_type": "chat_turn", "raw_payload": {"role": "user", "content": msg}}
+    for msg in conversation
+], async_index=True)
+
+# Poll until done
+for job in result["queued_jobs"]:
+    status = client.job_status(job["job_id"])
+    print(f"{job['job_id']}: {status['status']}")
+```
+
+See [POST /v2/ingest](/api-reference/v2-ingest) and [GET /v2/jobs/{job_id}](/api-reference/v2-jobs) for the full reference.
+
+---
+
+## Multiple workspaces
+
+V1 gives every tenant one workspace. V2 lets you create named workspaces — each fully isolated, each routable to its own storage if you're on an appropriate plan.
+
+| Plan | Workspaces |
+|---|---|
+| Pro | 5 |
+| Team | 20 |
+| Enterprise | Unlimited |
+
+Use workspaces to separate environments (staging vs. prod), projects, or tenants in a multi-tenant product.
+
+---
+
+<Card title="Upgrade to V2" icon="arrow-up-right" href="https://9dlabs.xyz/signup">
+  Pro starts at $9.99/mo. Everything in Free, plus V2 access, semantic retrieval, adaptive budget, and 100K events/month.
+</Card>

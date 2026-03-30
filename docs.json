@@ -48,7 +48,7 @@
             "pages": ["api-reference/overview"]
           },
           {
-            "group": "Endpoints",
+            "group": "V1 — Free & above",
             "pages": [
               "api-reference/ingest",
               "api-reference/context-pack",
@@ -60,12 +60,28 @@
               "api-reference/billing",
               "api-reference/health"
             ]
+          },
+          {
+            "group": "V2 — Pro, Team, Enterprise",
+            "pages": [
+              "api-reference/v2-overview",
+              "api-reference/v2-ingest",
+              "api-reference/v2-context-pack",
+              "api-reference/v2-jobs"
+            ]
           }
         ]
       },
       {
         "tab": "SDKs",
         "groups": [
+          {
+            "group": "Agents SDK",
+            "pages": [
+              "sdk/agents",
+              "sdk/agents-client"
+            ]
+          },
           {
             "group": "Python SDK",
             "pages": [
