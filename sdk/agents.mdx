@@ -44,13 +44,22 @@ if state.can("work_on_task"):
 ```python
 Agent(
     api_key: str,
-    workspace: str,
+    base_url: str = "https://api.9dlabs.xyz",
+    workspace: str = "default",
     world: str = "default",
     mode: str = "safe",
     name: str = "",           # Stable identity label. Auto-generated if omitted.
-    base_url: str = "https://api.9dlabs.xyz",
 )
 ```
+
+| Parameter | Description |
+|---|---|
+| `api_key` | Your API key. |
+| `base_url` | Server URL. Defaults to the hosted API. Use `http://127.0.0.1:8082` for local development. |
+| `workspace` | Workspace scope — isolates data, tasks, and connections. |
+| `world` | World scope — use one world per logical project or environment. |
+| `mode` | Trust mode. Controls what the agent is allowed to do (see below). |
+| `name` | Stable identity label. Becomes the `actor_id` in the runtime. Ownership, locks, handoffs, and audit trails all key on this. Auto-generated UUID if omitted. |
 
 ### Modes
 
@@ -72,7 +81,7 @@ agent.memory.add(
 
 ```python
 agent.memory.add_many(items: list[dict]) -> list[str]
-# Each item: {"content": "...", "title": "...", "artifact_type": "..."}
+# Each item: {"content": "...", "title": "...", "type": "document"}  # type defaults to "document"
 ```
 
 ```python
@@ -88,6 +97,35 @@ agent.memory.search(
 ```python
 agent.memory.list_artifacts(limit: int = 50, offset: int = 0) -> ArtifactListPage
 ```
+
+## Connections
+
+Connect external integrations (Gmail, Slack, Jira, etc.) via OAuth.
+
+```python
+info = agent.connect(provider: str, open_browser: bool = True) -> ConnectionInfo
+# Opens the browser for OAuth authorization and returns a ConnectionInfo
+```
+
+```python
+agent.connections() -> list[ConnectionInfo]
+# Lists all integrations connected to the workspace
+```
+
+`ConnectionInfo` fields: `connection_id`, `provider`, `status` (`"pending"`, `"connected"`, `"revoked"`), `trust_mode`
+
+```python
+# Connect Gmail, then verify
+info = agent.connect("gmail")
+# Browser opens → user authorizes → callback completes
+
+for conn in agent.connections():
+    print(f"{conn.provider}: {conn.status}")
+```
+
+<Tip>
+For programmatic connection management (create without browser, set trust modes, test connectivity), use the [`MemoryClient`](/sdk/agents-client#connections) directly via `agent.runtime`.
+</Tip>
 
 ## Tasks
 
